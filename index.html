@@ -418,6 +418,28 @@
       font-size: 0.92rem;
     }
 
+    .debug-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid rgba(109, 97, 122, 0.16);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 0.92rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .debug-file {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .debug-log {
       width: 100%;
       min-height: 150px;
@@ -432,6 +454,13 @@
       font: 0.86rem/1.55 Consolas, "Cascadia Mono", "Courier New", monospace;
       white-space: pre-wrap;
       word-break: break-word;
+    }
+
+    .debug-note {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
     }
 
     @media (max-width: 900px) {
@@ -583,11 +612,20 @@
       <div class="debug-head">
         <h2>偵錯紀錄</h2>
         <div class="debug-actions">
+          <a class="debug-link" href="https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL" target="_blank" rel="noopener">下載 CPI CSV</a>
+          <a class="debug-link" href="https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10" target="_blank" rel="noopener">下載 10Y CSV</a>
+          <button class="debug-button" id="importCpiButton" type="button">匯入 CPI CSV</button>
+          <button class="debug-button" id="importTenYearButton" type="button">匯入 10Y CSV</button>
           <button class="debug-button" id="copyLogButton" type="button">複製紀錄</button>
           <button class="debug-button" id="clearLogButton" type="button">清除紀錄</button>
         </div>
       </div>
+      <p class="debug-note">
+        這個靜態頁本來就是在你的瀏覽器端讀取資料；若瀏覽器安全規則阻擋跨網域讀取，請先下載 CSV，再用匯入按鈕把資料存進瀏覽器快取。
+      </p>
       <pre class="debug-log" id="debugLog" aria-live="polite">等待資料讀取...</pre>
+      <input class="debug-file" id="importCpiFile" type="file" accept=".csv,text/csv">
+      <input class="debug-file" id="importTenYearFile" type="file" accept=".csv,text/csv">
     </section>
   </main>
 
@@ -644,7 +682,11 @@
       periodLabel: document.querySelector("#periodLabel"),
       debugLog: document.querySelector("#debugLog"),
       copyLogButton: document.querySelector("#copyLogButton"),
-      clearLogButton: document.querySelector("#clearLogButton")
+      clearLogButton: document.querySelector("#clearLogButton"),
+      importCpiButton: document.querySelector("#importCpiButton"),
+      importTenYearButton: document.querySelector("#importTenYearButton"),
+      importCpiFile: document.querySelector("#importCpiFile"),
+      importTenYearFile: document.querySelector("#importTenYearFile")
     };
 
     function addLog(message, detail = "") {
@@ -740,9 +782,32 @@
         { name: "FRED 直連", url: directUrl, viaProxy: false },
         { name: "AllOrigins raw", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`, viaProxy: true },
         { name: "CorsProxy.io", url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`, viaProxy: true },
-        { name: "CodeTabs proxy", url: `https://api.codetabs.com/v1/proxy?quest=${directUrl}`, viaProxy: true },
+        { name: "CodeTabs proxy", url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(directUrl)}`, viaProxy: true },
         { name: "ThingProxy", url: `https://thingproxy.freeboard.io/fetch/${directUrl}`, viaProxy: true }
       ];
+    }
+
+    async function importCsvFile(file, dataset) {
+      if (!file) {
+        return;
+      }
+      addLog(`${dataset.column} 開始匯入 CSV`, file.name);
+      try {
+        const text = await file.text();
+        if (!text.includes(dataset.column)) {
+          throw new Error(`CSV 欄位不符合預期，找不到 ${dataset.column}`);
+        }
+        const rows = parseCsv(text, dataset.column);
+        if (!rows.length) {
+          throw new Error("CSV 沒有可解析資料列");
+        }
+        writeCachedCsv(dataset.cacheKey, text);
+        addLog(`${dataset.column} 匯入成功，已存入瀏覽器快取`, `${rows.length.toLocaleString("zh-Hant")} 列`);
+        await loadData(false);
+      } catch (error) {
+        addLog(`${dataset.column} 匯入失敗`, describeError(error));
+        setStatus(`${dataset.column} 匯入失敗：${describeError(error)}`, true);
+      }
     }
 
     async function fetchTextWithTimeout(source, dataset) {
@@ -1188,7 +1253,7 @@
           setStatus(`已下載 FRED 最新資料，並存入瀏覽器快取。`);
         }
       } catch (error) {
-        setStatus(`無法讀取 FRED 資料，也沒有可用的瀏覽器快取。最後錯誤：${describeError(error)}`, true);
+        setStatus(`瀏覽器無法直接讀取 FRED CSV，也沒有可用快取。請用下方「下載 CSV」與「匯入 CSV」建立瀏覽器快取。最後錯誤：${describeError(error)}`, true);
         console.error(error);
       } finally {
         els.refreshButton.disabled = false;
@@ -1249,6 +1314,10 @@
     els.refreshButton.addEventListener("click", () => loadData(true));
     els.downloadButton.addEventListener("click", downloadPng);
     els.clearLogButton.addEventListener("click", clearLog);
+    els.importCpiButton.addEventListener("click", () => els.importCpiFile.click());
+    els.importTenYearButton.addEventListener("click", () => els.importTenYearFile.click());
+    els.importCpiFile.addEventListener("change", () => importCsvFile(els.importCpiFile.files[0], DATASETS.cpi));
+    els.importTenYearFile.addEventListener("change", () => importCsvFile(els.importTenYearFile.files[0], DATASETS.tenYear));
     els.copyLogButton.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(els.debugLog.textContent);
