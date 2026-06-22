@@ -47,6 +47,12 @@ if errorlevel 1 (
   echo [INFO] No file changes to commit.
 )
 
+git fetch origin %BRANCH%
+if not errorlevel 1 (
+  git merge --allow-unrelated-histories -X ours --no-edit origin/%BRANCH%
+  if errorlevel 1 goto failed
+)
+
 git push -u origin %BRANCH%
 if errorlevel 1 goto failed
 
