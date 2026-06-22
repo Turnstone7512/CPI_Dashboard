@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>美國通膨與十年期公債儀表板</title>
+  <style>
+    :root {
+      --ink: #51495f;
+      --muted: #81778f;
+      --panel: #fffefc;
+      --mint: #c9f2df;
+      --pink: #ffd6df;
+      --lavender: #ded8ff;
+      --butter: #fff0b8;
+      --blue: #9dd9f3;
+      --blue-text: #4aaed5;
+      --green-text: #58b889;
+      --danger: #e25563;
+      --pastel-red: #ff9eaa;
+      --heavy-line: #6d617a;
+      --shadow: 0 18px 50px rgba(103, 91, 122, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(255, 214, 223, 0.78), transparent 32rem),
+        radial-gradient(circle at top right, rgba(201, 242, 223, 0.86), transparent 30rem),
+        linear-gradient(135deg, #fffaf7 0%, #f7f2ff 54%, #f0fbff 100%);
+    }
+
+    main {
+      width: min(100%, 1180px);
+      margin: 0 auto;
+      padding: 32px 18px 46px;
+    }
+
+    header {
+      margin-bottom: 22px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 6vw, 4rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0 auto;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .term {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      border-bottom: 2px dotted rgba(109, 97, 122, 0.32);
+      cursor: help;
+      text-decoration: none;
+    }
+
+    .term::after {
+      content: attr(data-en);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      z-index: 40;
+      width: max-content;
+      max-width: 240px;
+      padding: 7px 9px;
+      border: 1px solid rgba(109, 97, 122, 0.18);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 12px 28px rgba(81, 73, 95, 0.18);
+      color: var(--ink);
+      font-size: 0.82rem;
+      font-weight: 750;
+      line-height: 1.3;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 4px);
+      transition: opacity 140ms ease, transform 140ms ease;
+      white-space: normal;
+    }
+
+    .term:hover::after,
+    .term:focus-visible::after {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .shell {
+      display: grid;
+      gap: 18px;
+      align-items: start;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 310px);
+    }
+
+    .chart-panel,
+    .side-panel,
+    .summary-strip {
+      border: 1px solid rgba(109, 97, 122, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 254, 252, 0.86);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .chart-panel {
+      min-width: 0;
+      padding: 18px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .periods,
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      min-height: 42px;
+      padding: 0 14px;
+      transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    }
+
+    button:hover {
+      filter: saturate(1.08);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      cursor: wait;
+      filter: grayscale(0.25);
+      opacity: 0.76;
+    }
+
+    .period-button {
+      background: #fff;
+      border: 1px solid rgba(109, 97, 122, 0.16);
+      min-width: 52px;
+    }
+
+    .period-button.active {
+      background: linear-gradient(135deg, var(--mint), var(--blue));
+      box-shadow: 0 10px 24px rgba(90, 178, 193, 0.22);
+    }
+
+    .download-button {
+      background: var(--butter);
+    }
+
+    .refresh-button {
+      background: var(--lavender);
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 650;
+      min-height: 24px;
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .canvas-wrap {
+      position: relative;
+      display: grid;
+      gap: 14px;
+    }
+
+    .chart-title {
+      margin: 8px 0 4px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      border: 2px solid rgba(109, 97, 122, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.74);
+    }
+
+    #mainChart {
+      height: 440px;
+    }
+
+    #spreadChart {
+      height: 230px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(109, 97, 122, 0.12);
+    }
+
+    .swatch.cpi {
+      background: var(--pastel-red);
+    }
+
+    .swatch.yield {
+      background: var(--blue-text);
+    }
+
+    .swatch.red {
+      background: rgba(255, 158, 170, 0.62);
+    }
+
+    .swatch.green {
+      background: rgba(118, 207, 165, 0.56);
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 50;
+      display: none;
+      min-width: 190px;
+      padding: 9px 11px;
+      border: 1px solid rgba(109, 97, 122, 0.18);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 14px 32px rgba(81, 73, 95, 0.2);
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+
+    .side-panel {
+      padding: 18px;
+    }
+
+    .side-panel h2 {
+      margin: 0 0 14px;
+      font-size: 1.15rem;
+    }
+
+    .metric-list,
+    .reading-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .metric {
+      display: grid;
+      gap: 3px;
+      padding: 10px;
+      border: 1px solid rgba(109, 97, 122, 0.12);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 750;
+    }
+
+    .metric-value {
+      color: var(--ink);
+      font-size: 1.34rem;
+      font-weight: 830;
+      line-height: 1.2;
+    }
+
+    .metric-note {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .summary-strip {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      padding: 14px;
+    }
+
+    .summary-card {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(109, 97, 122, 0.13);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .summary-card.red {
+      background: #fff1f3;
+    }
+
+    .summary-card.green {
+      background: #eefaf4;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 750;
+    }
+
+    .summary-value {
+      margin-top: 4px;
+      font-size: 1.24rem;
+      font-weight: 850;
+      line-height: 1.25;
+    }
+
+    .reading-list {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.62;
+    }
+
+    .reading-list li {
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(109, 97, 122, 0.1);
+    }
+
+    @media (max-width: 900px) {
+      main {
+        padding: 18px 10px 28px;
+      }
+
+      .shell,
+      .summary-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-panel,
+      .side-panel,
+      .summary-strip {
+        padding: 10px;
+        box-shadow: 0 10px 28px rgba(103, 91, 122, 0.14);
+      }
+
+      .toolbar,
+      .periods,
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+      }
+
+      .status {
+        grid-column: 1 / -1;
+      }
+
+      button {
+        width: 100%;
+      }
+
+      #mainChart {
+        height: 360px;
+      }
+
+      #spreadChart {
+        height: 220px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>美國通膨與十年期公債</h1>
+      <p class="subtitle">
+        追蹤
+        <span class="term" tabindex="0" data-en="Consumer Price Index, Year-over-Year">消費者物價指數年增率</span>
+        與
+        <span class="term" tabindex="0" data-en="10-Year Treasury Yield">十年期美國公債殖利率</span>
+        的相對高低，並即時計算
+        <span class="term" tabindex="0" data-en="Real Yield = 10Y Treasury Yield - CPI YoY">實質利率</span>
+        與區間統計。
+      </p>
+    </header>
+
+    <div class="shell">
+      <section class="chart-panel" aria-label="通膨與公債殖利率圖表">
+        <div class="toolbar">
+          <div class="periods" id="periodButtons" aria-label="選擇期間"></div>
+          <div class="actions">
+            <button class="refresh-button" id="refreshButton" type="button">重新整理資料</button>
+            <button class="download-button" id="downloadButton" type="button">下載圖片</button>
+          </div>
+          <div class="status" id="status" role="status" aria-live="polite">準備讀取資料。</div>
+        </div>
+
+        <div class="legend" aria-label="圖例">
+          <span class="legend-item"><span class="swatch cpi"></span><span class="term" tabindex="0" data-en="CPI YoY (%)">消費者物價年增率</span></span>
+          <span class="legend-item"><span class="swatch yield"></span><span class="term" tabindex="0" data-en="10Y Treasury Yield (%)">十年期公債殖利率</span></span>
+          <span class="legend-item"><span class="swatch red"></span>通膨高於殖利率</span>
+          <span class="legend-item"><span class="swatch green"></span>殖利率高於通膨</span>
+        </div>
+
+        <div class="canvas-wrap" id="chartArea">
+          <h2 class="chart-title" id="mainTitle">近一年走勢</h2>
+          <canvas id="mainChart" aria-label="消費者物價年增率與十年期公債殖利率比較圖"></canvas>
+          <h2 class="chart-title">
+            <span class="term" tabindex="0" data-en="Real Yield = 10Y Treasury Yield - CPI YoY">實質利率</span>
+          </h2>
+          <canvas id="spreadChart" aria-label="實質利率走勢圖"></canvas>
+          <div class="tooltip" id="chartTooltip"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel" aria-label="目前資料">
+        <h2>目前資料</h2>
+        <ul class="metric-list">
+          <li class="metric">
+            <span class="metric-label">日期</span>
+            <span class="metric-value" id="latestDate">--</span>
+            <span class="metric-note">FRED 可取得的最新合併交易日。</span>
+          </li>
+          <li class="metric">
+            <span class="metric-label"><span class="term" tabindex="0" data-en="CPI YoY">消費者物價年增率</span></span>
+            <span class="metric-value" id="latestCpi">--</span>
+          </li>
+          <li class="metric">
+            <span class="metric-label"><span class="term" tabindex="0" data-en="10Y Treasury Yield">十年期公債殖利率</span></span>
+            <span class="metric-value" id="latestYield">--</span>
+          </li>
+          <li class="metric">
+            <span class="metric-label"><span class="term" tabindex="0" data-en="Real Yield">實質利率</span></span>
+            <span class="metric-value" id="latestSpread">--</span>
+            <span class="metric-note">十年期公債殖利率減去消費者物價年增率。</span>
+          </li>
+        </ul>
+
+        <h2 style="margin-top: 18px;">解讀</h2>
+        <ul class="reading-list">
+          <li>粉紅區表示通膨年增率高於十年期公債殖利率。</li>
+          <li>綠色區表示十年期公債殖利率高於通膨年增率。</li>
+          <li>實質利率高於 0 時，長天期名目利率大於當前通膨年增率。</li>
+        </ul>
+      </aside>
+
+      <section class="summary-strip" aria-label="期間統計">
+        <article class="summary-card">
+          <div class="summary-label">期間資料筆數</div>
+          <div class="summary-value" id="totalDays">--</div>
+        </article>
+        <article class="summary-card red">
+          <div class="summary-label">通膨高於殖利率</div>
+          <div class="summary-value" id="cpiHigher">--</div>
+        </article>
+        <article class="summary-card green">
+          <div class="summary-label">殖利率高於通膨</div>
+          <div class="summary-value" id="yieldHigher">--</div>
+        </article>
+        <article class="summary-card">
+          <div class="summary-label">目前區間</div>
+          <div class="summary-value" id="periodLabel">近 1 年</div>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const DATASETS = {
+      cpi: {
+        url: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+        cacheKey: "cpi-dashboard-cpi-csv",
+        column: "CPIAUCSL"
+      },
+      tenYear: {
+        url: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+        cacheKey: "cpi-dashboard-ten-year-csv",
+        column: "DGS10"
+      }
+    };
+    const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+    const PERIODS = [
+      { label: "1年", years: 1 },
+      { label: "3年", years: 3 },
+      { label: "5年", years: 5 },
+      { label: "10年", years: 10 },
+      { label: "20年", years: 20 },
+      { label: "50年", years: 50 },
+      { label: "100年", years: 100 }
+    ];
+
+    const state = {
+      currentYears: 1,
+      cpi: [],
+      tenYear: [],
+      merged: [],
+      filtered: [],
+      hoverIndex: null
+    };
+
+    const els = {
+      periodButtons: document.querySelector("#periodButtons"),
+      refreshButton: document.querySelector("#refreshButton"),
+      downloadButton: document.querySelector("#downloadButton"),
+      status: document.querySelector("#status"),
+      mainTitle: document.querySelector("#mainTitle"),
+      mainChart: document.querySelector("#mainChart"),
+      spreadChart: document.querySelector("#spreadChart"),
+      tooltip: document.querySelector("#chartTooltip"),
+      latestDate: document.querySelector("#latestDate"),
+      latestCpi: document.querySelector("#latestCpi"),
+      latestYield: document.querySelector("#latestYield"),
+      latestSpread: document.querySelector("#latestSpread"),
+      totalDays: document.querySelector("#totalDays"),
+      cpiHigher: document.querySelector("#cpiHigher"),
+      yieldHigher: document.querySelector("#yieldHigher"),
+      periodLabel: document.querySelector("#periodLabel")
+    };
+
+    function setStatus(message, isError = false) {
+      els.status.textContent = message;
+      els.status.classList.toggle("error", isError);
+    }
+
+    function formatPercent(value) {
+      return `${value.toFixed(2)}%`;
+    }
+
+    function formatDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseCsv(text, valueColumn) {
+      return text.trim().split(/\r?\n/).slice(1).map((line) => {
+        const [dateText, rawValue] = line.split(",");
+        const value = Number(rawValue);
+        if (!dateText || rawValue === "." || Number.isNaN(value)) {
+          return null;
+        }
+        return {
+          date: new Date(`${dateText}T00:00:00`),
+          value,
+          source: valueColumn
+        };
+      }).filter(Boolean);
+    }
+
+    function readCachedCsv(cacheKey) {
+      try {
+        const raw = localStorage.getItem(cacheKey);
+        if (!raw) {
+          return null;
+        }
+        const cached = JSON.parse(raw);
+        if (!cached.text || !cached.savedAt) {
+          return null;
+        }
+        return cached;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeCachedCsv(cacheKey, text) {
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          savedAt: Date.now(),
+          text
+        }));
+      } catch (error) {
+        console.warn("瀏覽器快取寫入失敗", error);
+      }
+    }
+
+    function buildDatasetUrls(dataset) {
+      const joiner = dataset.url.includes("?") ? "&" : "?";
+      const directUrl = `${dataset.url}${joiner}t=${Date.now()}`;
+      return [
+        { url: directUrl, viaProxy: false },
+        { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`, viaProxy: true },
+        { url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`, viaProxy: true }
+      ];
+    }
+
+    async function fetchDataset(dataset, forceRefresh = false) {
+      const cached = readCachedCsv(dataset.cacheKey);
+      const isFresh = cached && Date.now() - cached.savedAt < CACHE_TTL_MS;
+      if (!forceRefresh && isFresh) {
+        return {
+          rows: parseCsv(cached.text, dataset.column),
+          fromCache: true,
+          savedAt: cached.savedAt
+        };
+      }
+
+      let lastError = null;
+      try {
+        for (const source of buildDatasetUrls(dataset)) {
+          try {
+            const response = await fetch(source.url, { cache: "reload" });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const text = await response.text();
+            if (!text.includes(dataset.column)) {
+              throw new Error("CSV 欄位不符合預期");
+            }
+            writeCachedCsv(dataset.cacheKey, text);
+            return {
+              rows: parseCsv(text, dataset.column),
+              fromCache: false,
+              fromProxy: source.viaProxy,
+              savedAt: Date.now()
+            };
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError || new Error("所有資料來源皆失敗");
+      } catch (error) {
+        if (cached) {
+          return {
+            rows: parseCsv(cached.text, dataset.column),
+            fromCache: true,
+            savedAt: cached.savedAt,
+            stale: true
+          };
+        }
+        throw error;
+      }
+    }
+
+    function buildCpiYoY(cpiRows) {
+      return cpiRows.map((row, index) => {
+        const previous = cpiRows[index - 12];
+        if (!previous) {
+          return null;
+        }
+        return {
+          date: row.date,
+          value: ((row.value / previous.value) - 1) * 100
+        };
+      }).filter(Boolean);
+    }
+
+    function mergeAsOf(tenYearRows, cpiRows) {
+      const merged = [];
+      let cpiIndex = 0;
+
+      tenYearRows.forEach((yieldRow) => {
+        while (cpiIndex + 1 < cpiRows.length && cpiRows[cpiIndex + 1].date <= yieldRow.date) {
+          cpiIndex += 1;
+        }
+        const cpiRow = cpiRows[cpiIndex];
+        if (!cpiRow || cpiRow.date > yieldRow.date) {
+          return;
+        }
+        merged.push({
+          date: yieldRow.date,
+          cpi: cpiRow.value,
+          yield10: yieldRow.value,
+          spread: yieldRow.value - cpiRow.value
+        });
+      });
+
+      return merged;
+    }
+
+    function getChartBounds(rows, keys) {
+      const values = rows.flatMap((row) => keys.map((key) => row[key]));
+      let min = Math.min(...values);
+      let max = Math.max(...values);
+      if (min === max) {
+        min -= 1;
+        max += 1;
+      }
+      const padding = Math.max((max - min) * 0.12, 0.8);
+      min = Math.floor((min - padding) * 2) / 2;
+      max = Math.ceil((max + padding) * 2) / 2;
+      return { min, max };
+    }
+
+    function setupCanvas(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(rect.width * ratio));
+      canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { ctx, width: rect.width, height: rect.height };
+    }
+
+    function makeScale(rows, width, height, bounds) {
+      const margin = { top: 24, right: 24, bottom: 42, left: 58 };
+      const plotWidth = width - margin.left - margin.right;
+      const plotHeight = height - margin.top - margin.bottom;
+      const firstTime = rows[0].date.getTime();
+      const lastTime = rows[rows.length - 1].date.getTime();
+      const span = Math.max(lastTime - firstTime, 1);
+
+      return {
+        margin,
+        plotWidth,
+        plotHeight,
+        x: (date) => margin.left + ((date.getTime() - firstTime) / span) * plotWidth,
+        y: (value) => margin.top + ((bounds.max - value) / (bounds.max - bounds.min)) * plotHeight
+      };
+    }
+
+    function drawAxes(ctx, rows, width, height, bounds, label) {
+      const scale = makeScale(rows, width, height, bounds);
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.74)";
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.strokeStyle = "rgba(109, 97, 122, 0.18)";
+      ctx.lineWidth = 1;
+      ctx.font = "12px Segoe UI, Noto Sans TC, sans-serif";
+      ctx.fillStyle = "#81778f";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+
+      const gridCount = 5;
+      for (let i = 0; i <= gridCount; i += 1) {
+        const value = bounds.min + ((bounds.max - bounds.min) / gridCount) * i;
+        const y = scale.y(value);
+        ctx.beginPath();
+        ctx.moveTo(scale.margin.left, y);
+        ctx.lineTo(width - scale.margin.right, y);
+        ctx.stroke();
+        ctx.fillText(value.toFixed(1), scale.margin.left - 10, y);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const tickCount = Math.min(5, rows.length);
+      for (let i = 0; i < tickCount; i += 1) {
+        const index = Math.round((rows.length - 1) * (i / Math.max(tickCount - 1, 1)));
+        const row = rows[index];
+        ctx.fillText(`${row.date.getFullYear()}/${row.date.getMonth() + 1}`, scale.x(row.date), height - 30);
+      }
+
+      ctx.save();
+      ctx.translate(17, height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+
+      ctx.strokeStyle = "rgba(109, 97, 122, 0.35)";
+      ctx.strokeRect(scale.margin.left, scale.margin.top, scale.plotWidth, scale.plotHeight);
+      return scale;
+    }
+
+    function drawLine(ctx, rows, scale, key, color, width = 2.3) {
+      ctx.beginPath();
+      rows.forEach((row, index) => {
+        const x = scale.x(row.date);
+        const y = scale.y(row[key]);
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+
+    function drawDifferenceBands(ctx, rows, scale) {
+      for (let i = 0; i < rows.length - 1; i += 1) {
+        const current = rows[i];
+        const next = rows[i + 1];
+        const isRed = current.cpi >= current.yield10;
+        ctx.beginPath();
+        ctx.moveTo(scale.x(current.date), scale.y(current.cpi));
+        ctx.lineTo(scale.x(next.date), scale.y(next.cpi));
+        ctx.lineTo(scale.x(next.date), scale.y(next.yield10));
+        ctx.lineTo(scale.x(current.date), scale.y(current.yield10));
+        ctx.closePath();
+        ctx.fillStyle = isRed ? "rgba(255, 158, 170, 0.42)" : "rgba(118, 207, 165, 0.36)";
+        ctx.fill();
+      }
+    }
+
+    function drawZeroLine(ctx, rows, scale, bounds) {
+      if (bounds.min > 0 || bounds.max < 0) {
+        return;
+      }
+      const y = scale.y(0);
+      ctx.beginPath();
+      ctx.moveTo(scale.margin.left, y);
+      ctx.lineTo(scale.margin.left + scale.plotWidth, y);
+      ctx.strokeStyle = "rgba(81, 73, 95, 0.62)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
+    function drawSpreadBands(ctx, rows, scale) {
+      const zeroY = scale.y(0);
+      for (let i = 0; i < rows.length - 1; i += 1) {
+        const current = rows[i];
+        const next = rows[i + 1];
+        ctx.beginPath();
+        ctx.moveTo(scale.x(current.date), zeroY);
+        ctx.lineTo(scale.x(current.date), scale.y(current.spread));
+        ctx.lineTo(scale.x(next.date), scale.y(next.spread));
+        ctx.lineTo(scale.x(next.date), zeroY);
+        ctx.closePath();
+        ctx.fillStyle = current.spread >= 0 ? "rgba(118, 207, 165, 0.44)" : "rgba(255, 158, 170, 0.46)";
+        ctx.fill();
+      }
+    }
+
+    function drawHover(ctx, rows, scale, chartType) {
+      if (state.hoverIndex === null || !rows[state.hoverIndex]) {
+        return;
+      }
+      const row = rows[state.hoverIndex];
+      const x = scale.x(row.date);
+      ctx.beginPath();
+      ctx.moveTo(x, scale.margin.top);
+      ctx.lineTo(x, scale.margin.top + scale.plotHeight);
+      ctx.strokeStyle = "rgba(81, 73, 95, 0.38)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const points = chartType === "main"
+        ? [{ value: row.cpi, color: "#ff6f83" }, { value: row.yield10, color: "#4aaed5" }]
+        : [{ value: row.spread, color: row.spread >= 0 ? "#58b889" : "#e25563" }];
+
+      points.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(x, scale.y(point.value), 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+        ctx.strokeStyle = point.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+    }
+
+    function drawCharts() {
+      const rows = state.filtered;
+      if (!rows.length) {
+        return;
+      }
+
+      const main = setupCanvas(els.mainChart);
+      const mainBounds = getChartBounds(rows, ["cpi", "yield10"]);
+      const mainScale = drawAxes(main.ctx, rows, main.width, main.height, mainBounds, "百分比 (%)");
+      drawDifferenceBands(main.ctx, rows, mainScale);
+      drawZeroLine(main.ctx, rows, mainScale, mainBounds);
+      drawLine(main.ctx, rows, mainScale, "cpi", "#ff6f83", 2.5);
+      drawLine(main.ctx, rows, mainScale, "yield10", "#4aaed5", 2.5);
+      drawHover(main.ctx, rows, mainScale, "main");
+
+      const spread = setupCanvas(els.spreadChart);
+      const spreadBounds = getChartBounds(rows, ["spread"]);
+      const spreadScale = drawAxes(spread.ctx, rows, spread.width, spread.height, spreadBounds, "百分比 (%)");
+      drawSpreadBands(spread.ctx, rows, spreadScale);
+      drawZeroLine(spread.ctx, rows, spreadScale, spreadBounds);
+      drawLine(spread.ctx, rows, spreadScale, "spread", "#6d617a", 2.2);
+      drawHover(spread.ctx, rows, spreadScale, "spread");
+    }
+
+    function renderStats() {
+      const rows = state.filtered;
+      if (!rows.length) {
+        return;
+      }
+
+      const latest = rows[rows.length - 1];
+      const cpiHigherDays = rows.filter((row) => row.cpi > row.yield10).length;
+      const yieldHigherDays = rows.filter((row) => row.cpi < row.yield10).length;
+      const cpiPct = (cpiHigherDays / rows.length) * 100;
+      const yieldPct = (yieldHigherDays / rows.length) * 100;
+
+      els.latestDate.textContent = formatDate(latest.date);
+      els.latestCpi.textContent = formatPercent(latest.cpi);
+      els.latestYield.textContent = formatPercent(latest.yield10);
+      els.latestSpread.textContent = formatPercent(latest.spread);
+      els.totalDays.textContent = `${rows.length.toLocaleString("zh-Hant")} 筆`;
+      els.cpiHigher.textContent = `${cpiHigherDays.toLocaleString("zh-Hant")} 筆 · ${cpiPct.toFixed(1)}%`;
+      els.yieldHigher.textContent = `${yieldHigherDays.toLocaleString("zh-Hant")} 筆 · ${yieldPct.toFixed(1)}%`;
+      els.periodLabel.textContent = `近 ${state.currentYears} 年`;
+      els.mainTitle.textContent = `美國消費者物價年增率 vs 十年期公債殖利率 · 近 ${state.currentYears} 年`;
+    }
+
+    function updatePeriod(years) {
+      state.currentYears = years;
+      const latest = state.merged[state.merged.length - 1];
+      if (!latest) {
+        return;
+      }
+      const start = new Date(latest.date);
+      start.setFullYear(start.getFullYear() - years);
+      state.filtered = state.merged.filter((row) => row.date >= start);
+      state.hoverIndex = null;
+
+      document.querySelectorAll(".period-button").forEach((button) => {
+        button.classList.toggle("active", Number(button.dataset.years) === years);
+      });
+
+      renderStats();
+      drawCharts();
+    }
+
+    function handleChartMove(event) {
+      const rows = state.filtered;
+      if (!rows.length) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const bounds = getChartBounds(rows, event.currentTarget === els.mainChart ? ["cpi", "yield10"] : ["spread"]);
+      const scale = makeScale(rows, rect.width, rect.height, bounds);
+      const firstTime = rows[0].date.getTime();
+      const lastTime = rows[rows.length - 1].date.getTime();
+      const percent = Math.min(1, Math.max(0, (x - scale.margin.left) / scale.plotWidth));
+      const targetTime = firstTime + (lastTime - firstTime) * percent;
+
+      let nearestIndex = 0;
+      let nearestDistance = Infinity;
+      rows.forEach((row, index) => {
+        const distance = Math.abs(row.date.getTime() - targetTime);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+
+      state.hoverIndex = nearestIndex;
+      drawCharts();
+
+      const row = rows[nearestIndex];
+      els.tooltip.innerHTML = `
+        <div>${formatDate(row.date)}</div>
+        <div>消費者物價年增率：${formatPercent(row.cpi)}</div>
+        <div>十年期公債殖利率：${formatPercent(row.yield10)}</div>
+        <div>實質利率：${formatPercent(row.spread)}</div>
+      `;
+      els.tooltip.style.display = "block";
+      els.tooltip.style.left = `${Math.min(window.innerWidth - 220, event.clientX + 14)}px`;
+      els.tooltip.style.top = `${Math.max(12, event.clientY - 18)}px`;
+    }
+
+    function clearHover() {
+      state.hoverIndex = null;
+      els.tooltip.style.display = "none";
+      drawCharts();
+    }
+
+    function buildPeriodButtons() {
+      PERIODS.forEach((period) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "period-button";
+        button.dataset.years = String(period.years);
+        button.textContent = period.label;
+        button.addEventListener("click", () => updatePeriod(period.years));
+        els.periodButtons.appendChild(button);
+      });
+    }
+
+    async function loadData(forceRefresh = false) {
+      setStatus(forceRefresh ? "正在重新下載 FRED 資料..." : "正在讀取 FRED 資料...");
+      els.refreshButton.disabled = true;
+      try {
+        const [cpiResult, tenYearResult] = await Promise.all([
+          fetchDataset(DATASETS.cpi, forceRefresh),
+          fetchDataset(DATASETS.tenYear, forceRefresh)
+        ]);
+        state.cpi = buildCpiYoY(cpiResult.rows);
+        state.tenYear = tenYearResult.rows;
+        state.merged = mergeAsOf(state.tenYear, state.cpi);
+        if (!state.merged.length) {
+          throw new Error("資料合併後沒有可用列");
+        }
+        updatePeriod(state.currentYears);
+        const usedCache = cpiResult.fromCache || tenYearResult.fromCache;
+        const stale = cpiResult.stale || tenYearResult.stale;
+        if (stale) {
+          setStatus(`FRED 連線失敗，已使用瀏覽器快取資料。快取時間：${formatDate(new Date(Math.min(cpiResult.savedAt, tenYearResult.savedAt)))}`);
+        } else if (usedCache) {
+          setStatus(`已使用瀏覽器快取資料。按「重新整理資料」可強制下載最新資料。`);
+        } else if (cpiResult.fromProxy || tenYearResult.fromProxy) {
+          setStatus(`FRED 直連被瀏覽器擋下，已透過備援通道下載並存入瀏覽器快取。`);
+        } else {
+          setStatus(`已下載 FRED 最新資料，並存入瀏覽器快取。`);
+        }
+      } catch (error) {
+        setStatus("無法讀取 FRED 資料，也沒有可用的瀏覽器快取。請確認網路或稍後再試。", true);
+        console.error(error);
+      } finally {
+        els.refreshButton.disabled = false;
+      }
+    }
+
+    function downloadPng() {
+      if (!state.filtered.length) {
+        return;
+      }
+      const exportCanvas = document.createElement("canvas");
+      const width = 1600;
+      const height = 1050;
+      exportCanvas.width = width;
+      exportCanvas.height = height;
+      const ctx = exportCanvas.getContext("2d");
+      ctx.fillStyle = "#fffaf7";
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = "#51495f";
+      ctx.font = "700 46px Segoe UI, Noto Sans TC, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`美國通膨與十年期公債 · 近 ${state.currentYears} 年`, width / 2, 68);
+      ctx.drawImage(els.mainChart, 70, 105, 1030, 565);
+      ctx.drawImage(els.spreadChart, 70, 710, 1030, 280);
+
+      const latest = state.filtered[state.filtered.length - 1];
+      const lines = [
+        `日期：${formatDate(latest.date)}`,
+        `消費者物價年增率：${formatPercent(latest.cpi)}`,
+        `十年期公債殖利率：${formatPercent(latest.yield10)}`,
+        `實質利率：${formatPercent(latest.spread)}`,
+        `期間資料筆數：${state.filtered.length.toLocaleString("zh-Hant")}`
+      ];
+      ctx.fillStyle = "rgba(255, 254, 252, 0.92)";
+      ctx.strokeStyle = "rgba(109, 97, 122, 0.18)";
+      ctx.lineWidth = 2;
+      ctx.roundRect(1140, 105, 390, 310, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#51495f";
+      ctx.font = "700 28px Segoe UI, Noto Sans TC, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("目前資料", 1170, 158);
+      ctx.font = "600 22px Segoe UI, Noto Sans TC, sans-serif";
+      lines.forEach((line, index) => {
+        ctx.fillText(line, 1170, 210 + index * 42);
+      });
+
+      const link = document.createElement("a");
+      link.download = `CPI_vs_10Y_Dashboard_${state.currentYears}Y.png`;
+      link.href = exportCanvas.toDataURL("image/png");
+      link.click();
+    }
+
+    buildPeriodButtons();
+    els.refreshButton.addEventListener("click", () => loadData(true));
+    els.downloadButton.addEventListener("click", downloadPng);
+    els.mainChart.addEventListener("mousemove", handleChartMove);
+    els.spreadChart.addEventListener("mousemove", handleChartMove);
+    els.mainChart.addEventListener("mouseleave", clearHover);
+    els.spreadChart.addEventListener("mouseleave", clearHover);
+    window.addEventListener("resize", drawCharts);
+    loadData(false);
+  </script>
+</body>
+</html>
