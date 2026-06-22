@@ -381,6 +381,59 @@
       border: 1px solid rgba(109, 97, 122, 0.1);
     }
 
+    .debug-panel {
+      margin-top: 18px;
+      border: 1px solid rgba(109, 97, 122, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 254, 252, 0.86);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      padding: 16px;
+    }
+
+    .debug-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .debug-head h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .debug-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .debug-button {
+      min-height: 36px;
+      background: #fff;
+      border: 1px solid rgba(109, 97, 122, 0.16);
+      font-size: 0.92rem;
+    }
+
+    .debug-log {
+      width: 100%;
+      min-height: 150px;
+      max-height: 300px;
+      overflow: auto;
+      margin: 0;
+      padding: 12px;
+      border: 1px solid rgba(109, 97, 122, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--ink);
+      font: 0.86rem/1.55 Consolas, "Cascadia Mono", "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     @media (max-width: 900px) {
       main {
         padding: 18px 10px 28px;
@@ -420,6 +473,13 @@
 
       #spreadChart {
         height: 220px;
+      }
+
+      .debug-head,
+      .debug-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
       }
     }
   </style>
@@ -518,6 +578,17 @@
         </article>
       </section>
     </div>
+
+    <section class="debug-panel" aria-label="偵錯紀錄">
+      <div class="debug-head">
+        <h2>偵錯紀錄</h2>
+        <div class="debug-actions">
+          <button class="debug-button" id="copyLogButton" type="button">複製紀錄</button>
+          <button class="debug-button" id="clearLogButton" type="button">清除紀錄</button>
+        </div>
+      </div>
+      <pre class="debug-log" id="debugLog" aria-live="polite">等待資料讀取...</pre>
+    </section>
   </main>
 
   <script>
@@ -534,6 +605,7 @@
       }
     };
     const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+    const FETCH_TIMEOUT_MS = 12000;
     const PERIODS = [
       { label: "1年", years: 1 },
       { label: "3年", years: 3 },
@@ -569,12 +641,43 @@
       totalDays: document.querySelector("#totalDays"),
       cpiHigher: document.querySelector("#cpiHigher"),
       yieldHigher: document.querySelector("#yieldHigher"),
-      periodLabel: document.querySelector("#periodLabel")
+      periodLabel: document.querySelector("#periodLabel"),
+      debugLog: document.querySelector("#debugLog"),
+      copyLogButton: document.querySelector("#copyLogButton"),
+      clearLogButton: document.querySelector("#clearLogButton")
     };
+
+    function addLog(message, detail = "") {
+      const now = new Date();
+      const stamp = now.toLocaleTimeString("zh-Hant", { hour12: false });
+      const line = `[${stamp}] ${message}${detail ? ` | ${detail}` : ""}`;
+      if (els.debugLog.textContent === "等待資料讀取...") {
+        els.debugLog.textContent = "";
+      }
+      els.debugLog.textContent += `${line}\n`;
+      els.debugLog.scrollTop = els.debugLog.scrollHeight;
+      console.log(line);
+    }
+
+    function clearLog() {
+      els.debugLog.textContent = "";
+      addLog("已清除紀錄");
+    }
+
+    function describeError(error) {
+      if (!error) {
+        return "未知錯誤";
+      }
+      if (error.name === "AbortError") {
+        return `逾時超過 ${FETCH_TIMEOUT_MS / 1000} 秒`;
+      }
+      return error.message || String(error);
+    }
 
     function setStatus(message, isError = false) {
       els.status.textContent = message;
       els.status.classList.toggle("error", isError);
+      addLog(isError ? `狀態錯誤：${message}` : `狀態：${message}`);
     }
 
     function formatPercent(value) {
@@ -634,16 +737,47 @@
       const joiner = dataset.url.includes("?") ? "&" : "?";
       const directUrl = `${dataset.url}${joiner}t=${Date.now()}`;
       return [
-        { url: directUrl, viaProxy: false },
-        { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`, viaProxy: true },
-        { url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`, viaProxy: true }
+        { name: "FRED 直連", url: directUrl, viaProxy: false },
+        { name: "AllOrigins raw", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`, viaProxy: true },
+        { name: "CorsProxy.io", url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`, viaProxy: true },
+        { name: "CodeTabs proxy", url: `https://api.codetabs.com/v1/proxy?quest=${directUrl}`, viaProxy: true },
+        { name: "ThingProxy", url: `https://thingproxy.freeboard.io/fetch/${directUrl}`, viaProxy: true }
       ];
+    }
+
+    async function fetchTextWithTimeout(source, dataset) {
+      const controller = new AbortController();
+      const startedAt = performance.now();
+      const timerId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      addLog(`${dataset.column} 嘗試來源：${source.name}`, source.url);
+
+      try {
+        const response = await fetch(source.url, {
+          cache: "reload",
+          signal: controller.signal
+        });
+        const elapsed = Math.round(performance.now() - startedAt);
+        addLog(`${dataset.column} ${source.name} 回應`, `HTTP ${response.status}，${elapsed}ms`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const text = await response.text();
+        addLog(`${dataset.column} ${source.name} 內容`, `${text.length.toLocaleString("zh-Hant")} 字元`);
+        if (!text.includes(dataset.column)) {
+          throw new Error(`CSV 欄位不符合預期，找不到 ${dataset.column}`);
+        }
+        return text;
+      } finally {
+        window.clearTimeout(timerId);
+      }
     }
 
     async function fetchDataset(dataset, forceRefresh = false) {
       const cached = readCachedCsv(dataset.cacheKey);
       const isFresh = cached && Date.now() - cached.savedAt < CACHE_TTL_MS;
       if (!forceRefresh && isFresh) {
+        addLog(`${dataset.column} 使用瀏覽器快取`, `快取時間 ${formatDate(new Date(cached.savedAt))}`);
         return {
           rows: parseCsv(cached.text, dataset.column),
           fromCache: true,
@@ -655,28 +789,26 @@
       try {
         for (const source of buildDatasetUrls(dataset)) {
           try {
-            const response = await fetch(source.url, { cache: "reload" });
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            const text = await response.text();
-            if (!text.includes(dataset.column)) {
-              throw new Error("CSV 欄位不符合預期");
-            }
+            const text = await fetchTextWithTimeout(source, dataset);
             writeCachedCsv(dataset.cacheKey, text);
+            const rows = parseCsv(text, dataset.column);
+            addLog(`${dataset.column} CSV 解析成功`, `${rows.length.toLocaleString("zh-Hant")} 列`);
             return {
-              rows: parseCsv(text, dataset.column),
+              rows,
               fromCache: false,
               fromProxy: source.viaProxy,
+              sourceName: source.name,
               savedAt: Date.now()
             };
           } catch (error) {
             lastError = error;
+            addLog(`${dataset.column} ${source.name} 失敗`, describeError(error));
           }
         }
         throw lastError || new Error("所有資料來源皆失敗");
       } catch (error) {
         if (cached) {
+          addLog(`${dataset.column} 改用舊快取`, describeError(error));
           return {
             rows: parseCsv(cached.text, dataset.column),
             fromCache: true,
@@ -684,6 +816,7 @@
             stale: true
           };
         }
+        addLog(`${dataset.column} 沒有可用資料`, describeError(error));
         throw error;
       }
     }
@@ -1026,6 +1159,7 @@
     }
 
     async function loadData(forceRefresh = false) {
+      addLog(forceRefresh ? "開始強制重新下載資料" : "開始載入資料");
       setStatus(forceRefresh ? "正在重新下載 FRED 資料..." : "正在讀取 FRED 資料...");
       els.refreshButton.disabled = true;
       try {
@@ -1036,6 +1170,7 @@
         state.cpi = buildCpiYoY(cpiResult.rows);
         state.tenYear = tenYearResult.rows;
         state.merged = mergeAsOf(state.tenYear, state.cpi);
+        addLog("資料合併完成", `${state.merged.length.toLocaleString("zh-Hant")} 列`);
         if (!state.merged.length) {
           throw new Error("資料合併後沒有可用列");
         }
@@ -1048,14 +1183,16 @@
           setStatus(`已使用瀏覽器快取資料。按「重新整理資料」可強制下載最新資料。`);
         } else if (cpiResult.fromProxy || tenYearResult.fromProxy) {
           setStatus(`FRED 直連被瀏覽器擋下，已透過備援通道下載並存入瀏覽器快取。`);
+          addLog("使用備援通道", `CPI: ${cpiResult.sourceName}；10Y: ${tenYearResult.sourceName}`);
         } else {
           setStatus(`已下載 FRED 最新資料，並存入瀏覽器快取。`);
         }
       } catch (error) {
-        setStatus("無法讀取 FRED 資料，也沒有可用的瀏覽器快取。請確認網路或稍後再試。", true);
+        setStatus(`無法讀取 FRED 資料，也沒有可用的瀏覽器快取。最後錯誤：${describeError(error)}`, true);
         console.error(error);
       } finally {
         els.refreshButton.disabled = false;
+        addLog("資料流程結束");
       }
     }
 
@@ -1111,6 +1248,15 @@
     buildPeriodButtons();
     els.refreshButton.addEventListener("click", () => loadData(true));
     els.downloadButton.addEventListener("click", downloadPng);
+    els.clearLogButton.addEventListener("click", clearLog);
+    els.copyLogButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(els.debugLog.textContent);
+        addLog("已複製紀錄到剪貼簿");
+      } catch (error) {
+        addLog("複製紀錄失敗", describeError(error));
+      }
+    });
     els.mainChart.addEventListener("mousemove", handleChartMove);
     els.spreadChart.addEventListener("mousemove", handleChartMove);
     els.mainChart.addEventListener("mouseleave", clearHover);
